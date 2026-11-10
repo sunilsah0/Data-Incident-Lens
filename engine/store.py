@@ -57,6 +57,12 @@ def init_store():
         )""")
     con.close()
 
+def register_asset(asset_id, asset_type, name, criticality):
+    con = get_store()
+    con.execute("INSERT OR REPLACE INTO assets VALUES (?, ?, ?, ?)",
+                [asset_id, asset_type, name, criticality])
+    con.close()
+
 
 if __name__ == "__main__":
     init_store()

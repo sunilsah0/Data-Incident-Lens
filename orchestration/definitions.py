@@ -15,6 +15,8 @@ from engine.store import init_store, get_store
 from collectors.lineage import collect_lineage
 from collectors.quality import collect_quality
 
+from collectors.streaming import collect_streaming
+from collectors.cost import collect_cost
 
 def logged(name, fn, raise_on_fail=True):
     """Run a step, time it, and record the result in the events table."""
@@ -77,12 +79,21 @@ def lineage_graph():
 def quality_checks():
     logged("quality", collect_quality)
 
+@asset(deps=[quality_checks])
+def stream_metrics():
+    logged("streaming", collect_streaming)
+
+
+@asset(deps=[stream_metrics])
+def cost_metrics():
+    logged("cost", collect_cost)
+
 
 daily_job = define_asset_job("daily_pipeline", selection=AssetSelection.all())
 daily_schedule = ScheduleDefinition(job=daily_job, cron_schedule="0 6 * * *")
 
 defs = Definitions(
-    assets=[raw_data, dbt_models, dbt_tests, lineage_graph, quality_checks],
-    jobs=[daily_job],
+    assets=[raw_data, dbt_models, dbt_tests, lineage_graph, quality_checks,
+        stream_metrics, cost_metrics],
     schedules=[daily_schedule],
 )

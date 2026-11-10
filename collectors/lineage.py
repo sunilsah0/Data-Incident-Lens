@@ -43,8 +43,12 @@ def collect_lineage():
                 edges.add((id_of[dep], id_of[key]))
 
     con = get_store()
-    con.execute("DELETE FROM assets")
-    con.execute("DELETE FROM lineage_edges")
+    con.execute("""
+        DELETE FROM lineage_edges
+        WHERE upstream_id IN (SELECT asset_id FROM assets WHERE asset_type IN ('source','model'))
+          AND downstream_id IN (SELECT asset_id FROM assets WHERE asset_type IN ('source','model'))
+    """)
+    con.execute("DELETE FROM assets WHERE asset_type IN ('source','model')")
     for asset_id, (atype, name, crit) in assets.items():
         con.execute("INSERT INTO assets VALUES (?, ?, ?, ?)", [asset_id, atype, name, crit])
     for up, down in edges:

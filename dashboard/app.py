@@ -31,8 +31,9 @@ except Exception as e:
     st.error(f"Could not read the metadata store. Is Dagster writing to it right now? Refresh in a few seconds.\n\n{e}")
     st.stop()
 
-tab_overview, tab_quality, tab_pipeline = st.tabs(
-    ["Overview", "Data Quality", "Pipeline Monitoring"]
+tab_overview, tab_quality, tab_pipeline, tab_stream, tab_cost = st.tabs(
+    ["Overview", "Data Quality", "Pipeline Monitoring",
+     "Real-Time Analytics", "Cost Intelligence"]
 )
 
 # ---------- Overview ----------
@@ -94,3 +95,41 @@ with tab_pipeline:
         st.dataframe(pipeline, use_container_width=True)
         st.subheader("Runtime per step (seconds)")
         st.bar_chart(pipeline.groupby("asset_id")["value"].mean())
+
+# ---------- Real-Time Analytics ----------
+with tab_stream:
+    s = query("SELECT ts, metric, value, status FROM events "
+              "WHERE module = 'streaming' ORDER BY ts")
+    if len(s) == 0:
+        st.info("No streaming data yet. Run: python -m collectors.streaming")
+    else:
+        latest_s = s.sort_values("ts").groupby("metric").tail(1)
+        cols = st.columns(len(latest_s))
+        for col, (_, r) in zip(cols, latest_s.iterrows()):
+            icon = "OK" if r["status"] == "ok" else "FAIL"
+            col.metric(r["metric"], f"{r['value']:.3f}", icon)
+        wide = s.pivot_table(index="ts", columns="metric", values="value")
+        st.subheader("Event delay over time (seconds)")
+        st.line_chart(wide[["avg_lag_seconds", "p95_lag_seconds"]])
+        st.subheader("Late event rate over time")
+        st.line_chart(wide[["late_event_rate"]])
+        st.caption("Simulated event stream. A spike means events are arriving late.")
+
+# ---------- Cost Intelligence ----------
+with tab_cost:
+    c = query("SELECT ts, job_name, asset_id, runtime_seconds, cost_usd "
+              "FROM costs ORDER BY ts DESC")
+    if len(c) == 0:
+        st.info("No cost data yet. Run: python -m collectors.cost")
+    else:
+        by_job = c.groupby("job_name")["cost_usd"].sum()
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Total simulated cost", f"${c['cost_usd'].sum():.2f}")
+        c2.metric("Most expensive job", by_job.idxmax())
+        c3.metric("Cost records", len(c))
+        st.subheader("Cost by job (USD)")
+        st.bar_chart(by_job)
+        st.subheader("Cost over time (USD per hour)")
+        st.line_chart(c.set_index("ts").sort_index().resample("1h")["cost_usd"].sum())
+        st.dataframe(c, use_container_width=True)
+        st.caption("Simulated price per compute-second. Runtimes are real.")
