@@ -20,3 +20,4 @@ pipelines/dbt_packages/
 .DS_Store
 
 .dagster_home/
+models/

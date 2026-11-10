@@ -27,13 +27,15 @@ try:
     edges = query("SELECT * FROM lineage_edges")
     pipeline = query("SELECT ts, asset_id, value, status, details FROM events "
                      "WHERE module = 'pipeline' ORDER BY ts DESC")
+    anoms = query("SELECT ts, asset_id, module, metric, value, expected, zscore "
+            "FROM anomalies ORDER BY ts DESC")
 except Exception as e:
     st.error(f"Could not read the metadata store. Is Dagster writing to it right now? Refresh in a few seconds.\n\n{e}")
     st.stop()
 
-tab_overview, tab_quality, tab_pipeline, tab_stream, tab_cost = st.tabs(
+tab_overview, tab_quality, tab_pipeline, tab_stream, tab_cost, tab_ml = st.tabs(
     ["Overview", "Data Quality", "Pipeline Monitoring",
-     "Real-Time Analytics", "Cost Intelligence"]
+     "Real-Time Analytics", "Cost Intelligence", "ML Monitoring"]
 )
 
 # ---------- Overview ----------
@@ -133,3 +135,34 @@ with tab_cost:
         st.line_chart(c.set_index("ts").sort_index().resample("1h")["cost_usd"].sum())
         st.dataframe(c, use_container_width=True)
         st.caption("Simulated price per compute-second. Runtimes are real.")
+
+# ---------- Overview: anomalies ----------
+with tab_overview:
+    st.subheader("Detected anomalies")
+    if len(anoms) == 0:
+        st.success("No anomalies detected.")
+    else:
+        st.warning(f"{len(anoms)} anomalies detected")
+        st.dataframe(anoms, use_container_width=True)
+        st.caption("A value is flagged when it is more than 3 standard deviations "
+                   "away from the average of the previous 10 values.")
+
+# ---------- ML Monitoring ----------
+with tab_ml:
+    m = query("SELECT ts, metric, value, status FROM events "
+              "WHERE module = 'ml' ORDER BY ts")
+    if len(m) == 0:
+        st.info("No ML data yet. Run: python -m collectors.ml_monitor")
+    else:
+        latest_m = m.sort_values("ts").groupby("metric").tail(1)
+        cols = st.columns(len(latest_m))
+        for col, (_, r) in zip(cols, latest_m.iterrows()):
+            col.metric(r["metric"], f"{r['value']:.3f}",
+                       "OK" if r["status"] == "ok" else "FAIL")
+        wide = m.pivot_table(index="ts", columns="metric", values="value")
+        st.subheader("Model error over time (MAE, dollars)")
+        st.line_chart(wide[["mae"]])
+        st.subheader("Input drift over time (PSI of trip distance)")
+        st.line_chart(wide[["psi_trip_distance"]])
+        st.caption("PSI below 0.1 is stable, above 0.25 is a big shift. "
+                   "Each run simulates one new day of taxi data.")

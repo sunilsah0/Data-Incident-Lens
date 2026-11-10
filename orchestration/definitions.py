@@ -17,6 +17,8 @@ from collectors.quality import collect_quality
 
 from collectors.streaming import collect_streaming
 from collectors.cost import collect_cost
+from collectors.ml_monitor import collect_ml
+from engine.anomaly import detect_anomalies
 
 def logged(name, fn, raise_on_fail=True):
     """Run a step, time it, and record the result in the events table."""
@@ -88,12 +90,21 @@ def stream_metrics():
 def cost_metrics():
     logged("cost", collect_cost)
 
+@asset(deps=[cost_metrics])
+def ml_metrics():
+    logged("ml_monitor", collect_ml)
+
+
+@asset(deps=[ml_metrics])
+def anomaly_detection():
+    logged("anomaly", detect_anomalies)
+
 
 daily_job = define_asset_job("daily_pipeline", selection=AssetSelection.all())
 daily_schedule = ScheduleDefinition(job=daily_job, cron_schedule="0 6 * * *")
 
 defs = Definitions(
     assets=[raw_data, dbt_models, dbt_tests, lineage_graph, quality_checks,
-        stream_metrics, cost_metrics],
+        stream_metrics, cost_metrics, ml_metrics, anomaly_detection],
     schedules=[daily_schedule],
 )

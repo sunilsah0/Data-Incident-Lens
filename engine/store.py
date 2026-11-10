@@ -55,6 +55,17 @@ def init_store():
             status VARCHAR,
             details VARCHAR
         )""")
+    con.execute("""
+    CREATE TABLE IF NOT EXISTS anomalies (
+        event_id BIGINT,
+        ts TIMESTAMP,
+        asset_id VARCHAR,
+        module VARCHAR,
+        metric VARCHAR,
+        value DOUBLE,
+        expected DOUBLE,
+        zscore DOUBLE
+    )""")
     con.close()
 
 def register_asset(asset_id, asset_type, name, criticality):
