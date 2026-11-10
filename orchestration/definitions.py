@@ -20,6 +20,9 @@ from collectors.cost import collect_cost
 from collectors.ml_monitor import collect_ml
 from engine.anomaly import detect_anomalies
 
+from collectors.ai_reliability import collect_ai
+from collectors.governance import collect_governance
+
 def logged(name, fn, raise_on_fail=True):
     """Run a step, time it, and record the result in the events table."""
     start = time.time()
@@ -96,6 +99,16 @@ def ml_metrics():
 
 
 @asset(deps=[ml_metrics])
+def ai_metrics():
+    logged("ai_reliability", collect_ai)
+
+
+@asset(deps=[ai_metrics])
+def governance_metrics():
+    logged("governance", collect_governance)
+
+
+@asset(deps=[governance_metrics])
 def anomaly_detection():
     logged("anomaly", detect_anomalies)
 
@@ -105,6 +118,7 @@ daily_schedule = ScheduleDefinition(job=daily_job, cron_schedule="0 6 * * *")
 
 defs = Definitions(
     assets=[raw_data, dbt_models, dbt_tests, lineage_graph, quality_checks,
-        stream_metrics, cost_metrics, ml_metrics, anomaly_detection],
+            stream_metrics, cost_metrics, ml_metrics, ai_metrics,
+            governance_metrics, anomaly_detection],
     schedules=[daily_schedule],
 )

@@ -2,7 +2,7 @@ import duckdb
 import streamlit as st
 
 STORE = "data/metadata.duckdb"
-st.set_page_config(page_title="IncidentLens", layout="wide")
+st.set_page_config(page_title="SunilDataIncidentLens", layout="wide")
 
 
 @st.cache_data(ttl=10)
@@ -14,7 +14,7 @@ def query(sql):
         con.close()
 
 
-st.title("IncidentLens")
+st.title("SunilDataIncidentLens")
 st.caption("Data and AI reliability control tower")
 
 try:
@@ -33,11 +33,11 @@ except Exception as e:
     st.error(f"Could not read the metadata store. Is Dagster writing to it right now? Refresh in a few seconds.\n\n{e}")
     st.stop()
 
-tab_overview, tab_quality, tab_pipeline, tab_stream, tab_cost, tab_ml = st.tabs(
-    ["Overview", "Data Quality", "Pipeline Monitoring",
-     "Real-Time Analytics", "Cost Intelligence", "ML Monitoring"]
+(tab_overview, tab_quality, tab_pipeline, tab_stream, tab_cost,
+ tab_ml, tab_ai, tab_gov) = st.tabs(
+    ["Overview", "Data Quality", "Pipeline Monitoring", "Real-Time Analytics",
+     "Cost Intelligence", "ML Monitoring", "AI Reliability", "Governance & Security"]
 )
-
 # ---------- Overview ----------
 with tab_overview:
     health = (
@@ -166,3 +166,69 @@ with tab_ml:
         st.line_chart(wide[["psi_trip_distance"]])
         st.caption("PSI below 0.1 is stable, above 0.25 is a big shift. "
                    "Each run simulates one new day of taxi data.")
+
+
+# ---------- AI Reliability ----------
+with tab_ai:
+    a = query("SELECT ts, metric, value, status, details FROM events "
+              "WHERE module = 'ai' ORDER BY ts")
+    if len(a) == 0:
+        st.info("No AI data yet. Run: python -m collectors.ai_reliability")
+    else:
+        latest_a = a.sort_values("ts").groupby("metric").tail(1)
+        cols = st.columns(len(latest_a))
+        for col, (_, r) in zip(cols, latest_a.iterrows()):
+            col.metric(r["metric"], f"{r['value']:.3f}",
+                       "OK" if r["status"] == "ok" else "FAIL")
+        wide = a.pivot_table(index="ts", columns="metric", values="value")
+        st.subheader("Answer problems over time")
+        st.line_chart(wide[["stale_answer_rate", "unauthorized_answer_rate",
+                            "ungrounded_answer_rate"]])
+        try:
+            bad = query("SELECT ts, mode, role, question, doc_id, answer, stale, "
+                        "unauthorized, ungrounded FROM rag_answers "
+                        "WHERE stale OR unauthorized OR ungrounded "
+                        "ORDER BY ts DESC LIMIT 50")
+            st.subheader("Flagged answers")
+            st.dataframe(bad, use_container_width=True)
+        except Exception:
+            pass
+        st.caption("Stale = old document version. Unauthorized = the user's role is not "
+                   "allowed to see the source. Ungrounded = the answer is not supported "
+                   "by any retrieved document.")
+
+# ---------- Governance & Security ----------
+with tab_gov:
+    g = query("SELECT ts, metric, value, status FROM events "
+              "WHERE module = 'governance' ORDER BY ts")
+    if len(g) == 0:
+        st.info("No governance data yet. Run: python -m collectors.governance")
+    else:
+        latest_g = g.sort_values("ts").groupby("metric").tail(1)
+        cols = st.columns(len(latest_g))
+        for col, (_, r) in zip(cols, latest_g.iterrows()):
+            col.metric(r["metric"], f"{r['value']:.3f}",
+                       "OK" if r["status"] == "ok" else "FAIL")
+        wide = g.pivot_table(index="ts", columns="metric", values="value")
+        st.subheader("Access violations over time")
+        st.line_chart(wide[["access_violation_rate"]])
+        try:
+            st.subheader("Recent access violations")
+            st.dataframe(query("SELECT ts, user_name, role, asset_id FROM access_log "
+                               "WHERE NOT allowed ORDER BY ts DESC LIMIT 50"),
+                         use_container_width=True)
+            pii = query("SELECT * FROM pii_findings")
+            st.subheader("Personal data found by the scanner")
+            st.dataframe(pii, use_container_width=True)
+
+            import networkx as nx
+            graph = nx.DiGraph()
+            graph.add_edges_from(zip(edges.upstream_id, edges.downstream_id))
+            st.subheader("Where sensitive data flows (lineage)")
+            for asset in pii["asset_id"].unique():
+                down = sorted(nx.descendants(graph, asset)) if asset in graph else []
+                st.write(f"**{asset}** feeds: {', '.join(down) if down else 'nothing downstream'}")
+        except Exception as e:
+            st.info(f"Waiting for data: {e}")
+        st.caption("Simulated access log and fake customer data. The scanner uses "
+                   "simple patterns for emails, phone numbers and column names.")

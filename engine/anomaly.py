@@ -14,7 +14,9 @@ def detect_anomalies():
         FROM events
         WHERE value IS NOT NULL
           AND module IN ('data_quality', 'streaming', 'pipeline', 'ml')
+          AND module IN ('data_quality', 'streaming', 'pipeline', 'ml', 'ai', 'governance')
         ORDER BY ts, event_id
+        
     """).df()
 
     found = []

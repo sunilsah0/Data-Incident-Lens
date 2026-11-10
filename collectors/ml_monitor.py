@@ -59,7 +59,7 @@ def train():
 
 def collect_ml(drift=False):
     init_store()
-    register_asset(ASSET, "model", "fare_model", 3)
+    register_asset(ASSET, "ml_model", "fare_model", 3)
     if not os.path.exists(MODEL_PATH):
         train()
     bundle = joblib.load(MODEL_PATH)
