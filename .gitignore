@@ -18,3 +18,5 @@ pipelines/dbt_packages/
 # Editor and system files
 .vscode/
 .DS_Store
+
+.dagster_home/

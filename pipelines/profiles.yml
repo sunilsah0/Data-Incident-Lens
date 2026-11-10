@@ -3,5 +3,5 @@ incidentlens:
   outputs:
     dev:
       type: duckdb
-      path: ../data/incidentlens.duckdb
+      path: "{{ env_var('DUCKDB_PATH', '../data/incidentlens.duckdb') }}"
       schema: main
