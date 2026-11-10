@@ -1,0 +1,7 @@
+incidentlens:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: ../data/incidentlens.duckdb
+      schema: main

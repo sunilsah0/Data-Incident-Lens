@@ -1,0 +1,20 @@
+# Python environment and cache
+.venv/
+__pycache__/
+*.pyc
+
+# Big data files and the database
+data/
+
+# dbt generated folders
+pipelines/target/
+pipelines/logs/
+pipelines/dbt_packages/
+
+# Secrets (API keys)
+.env
+.streamlit/secrets.toml
+
+# Editor and system files
+.vscode/
+.DS_Store

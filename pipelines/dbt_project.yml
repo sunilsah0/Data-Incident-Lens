@@ -1,0 +1,4 @@
+name: incidentlens
+version: "1.0"
+profile: incidentlens
+model-paths: ["models"]

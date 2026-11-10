@@ -1,0 +1,12 @@
+version: 2
+models:
+  - name: stg_trips
+    columns:
+      - name: pickup_at
+        tests: [not_null]
+      - name: fare_amount
+        tests: [not_null]
+  - name: mart_daily_revenue
+    columns:
+      - name: trip_date
+        tests: [not_null, unique]
