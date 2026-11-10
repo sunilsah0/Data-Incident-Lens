@@ -1,3 +1,5 @@
+import json
+import pandas as pd
 import duckdb
 import streamlit as st
 
@@ -34,9 +36,10 @@ except Exception as e:
     st.stop()
 
 (tab_overview, tab_quality, tab_pipeline, tab_stream, tab_cost,
- tab_ml, tab_ai, tab_gov) = st.tabs(
+ tab_ml, tab_ai, tab_gov, tab_inc) = st.tabs(
     ["Overview", "Data Quality", "Pipeline Monitoring", "Real-Time Analytics",
-     "Cost Intelligence", "ML Monitoring", "AI Reliability", "Governance & Security"]
+     "Cost Intelligence", "ML Monitoring", "AI Reliability", "Governance & Security",
+     "Incident Management"]
 )
 # ---------- Overview ----------
 with tab_overview:
@@ -232,3 +235,44 @@ with tab_gov:
             st.info(f"Waiting for data: {e}")
         st.caption("Simulated access log and fake customer data. The scanner uses "
                    "simple patterns for emails, phone numbers and column names.")
+
+# ---------- Incident Management ----------
+with tab_inc:
+    inc = query("SELECT incident_id, opened_at, title, root_cause_asset, severity, "
+                "status, details FROM incidents ORDER BY severity DESC")
+    if len(inc) == 0:
+        st.info("No incidents yet. Run: python -m engine.incidents")
+    else:
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Incidents", len(inc))
+        c2.metric("Raw alerts", len(anoms))
+        c3.metric("Alert reduction", f"{len(anoms) / len(inc):.1f}x")
+        st.dataframe(inc.drop(columns=["details"]), use_container_width=True)
+
+        pick = st.selectbox(
+            "Investigate an incident", inc["incident_id"].tolist(),
+            format_func=lambda i: f"#{i}  " + inc.loc[inc.incident_id == i, "title"].iloc[0])
+        d = json.loads(inc.loc[inc.incident_id == pick, "details"].iloc[0])
+        root = inc.loc[inc.incident_id == pick, "root_cause_asset"].iloc[0]
+
+        st.subheader("Why this root cause? (score = product of the four parts)")
+        st.dataframe(pd.DataFrame(d["ranking"]), use_container_width=True)
+
+        st.subheader("Blast radius (red = root cause, orange = alerting, yellow = affected)")
+        dot = 'digraph { rankdir=LR; node [shape=box, style=filled, fontname=Helvetica];'
+        for a in assets["asset_id"]:
+            color = ("#f28b82" if a == root else
+                     "#fbbc04" if a in d["assets_with_alerts"] else
+                     "#fff2a8" if a in d["affected"] else "#e8e8e8")
+            dot += f' "{a}" [fillcolor="{color}"];'
+        for _, e in edges.iterrows():
+            dot += f' "{e.upstream_id}" -> "{e.downstream_id}";'
+        st.graphviz_chart(dot + " }")
+
+    try:
+        res = query("SELECT experiment, method, metric, value, n FROM experiment_results "
+                    "ORDER BY experiment, metric, method")
+        st.subheader("Experiment results")
+        st.dataframe(res, use_container_width=True)
+    except Exception:
+        st.caption("Experiment results appear here after: python -m experiments.run_experiments")
