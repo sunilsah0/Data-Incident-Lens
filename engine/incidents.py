@@ -60,6 +60,16 @@ def rank_root_causes(graph, strengths):
 def blast_radius(graph, root):
     return {root} | (nx.descendants(graph, root) if root in graph else set())
 
+def peel_roots(graph, strengths, max_roots=3):
+    """Pick the best root cause, remove the alerts it explains, repeat."""
+    remaining = dict(strengths)
+    roots = []
+    while remaining and len(roots) < max_roots:
+        root = rank_root_causes(graph, remaining)[0]["asset"]
+        roots.append(root)
+        region = blast_radius(graph, root)
+        remaining = {a: s for a, s in remaining.items() if a not in region}
+    return roots
 
 def run_live():
     init_store()

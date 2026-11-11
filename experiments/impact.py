@@ -38,7 +38,7 @@ def top_overlap(est, true, q=0.25):
 def main():
     lab = Lab()
     stats = baseline_stats(lab, BASELINE_SEEDS)
-    true_sev, ours, downstream, alert_count = [], [], [], []
+    true_sev, ours1, ours2, downstream, alert_count = [], [], [], [], []
     for fault in ALL_FAULTS:
         for seed in SEEDS:
             clean, faulty = lab.build(seed), lab.build(seed, fault)
@@ -56,19 +56,20 @@ def main():
             if strengths:
                 root = rank_root_causes(lab.graph, strengths)[0]["asset"]
                 region = blast_from_root(lab, root)
-                ours.append(strengths[root] * sum(lab.crit[t] for t in region))
+                ours1.append(strengths[root] * sum(lab.crit[t] for t in region))
+                ours2.append(sum(lab.crit[t] * s for t, s in strengths.items()))
                 downstream.append(1 + len(nx.descendants(lab.graph, root)))
                 alert_count.append(len(alerts))
-            else:                              # fault not detected: all methods see nothing
-                ours.append(0.0)
-                downstream.append(0)
-                alert_count.append(0)
+            else:
+                for lst in (ours1, ours2, downstream, alert_count):
+                    lst.append(0.0)
             true_sev.append(total)
 
     truth = pd.Series(true_sev)
     results = []
     print(f"{len(truth)} faults with a real effect\n")
-    for label, est in [("ours: alert strength x weighted blast radius", ours),
+    for label, est in [("ours v1: assumed blast radius", ours1),
+                       ("ours v2: observed damage x criticality", ours2),
                        ("baseline: number of downstream tables", downstream),
                        ("baseline: number of alerts", alert_count)]:
         rho = pd.Series(est).corr(truth, method="spearman")
@@ -76,10 +77,7 @@ def main():
         top = top_overlap(est, true_sev)
         results += [(label, "spearman_rank_correlation", rho),
                     (label, "top25pct_overlap", top)]
-        print(f"{label:48} spearman {rho:6.3f}   top-25% overlap {top:.2f}")
+        print(f"{label:44} spearman {rho:6.3f}   top-25% overlap {top:.2f}")
     save_results("business_impact", results, len(truth))
     print("\nSaved to the metadata store.")
-
-
-if __name__ == "__main__":
-    main()
+    

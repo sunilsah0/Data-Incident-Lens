@@ -39,7 +39,7 @@ NODES = [
      "GROUP BY EXTRACT(hour FROM pickup_at)", 2),
     ("fare_features", ["trips_enriched"],
      "SELECT trip_id, fare_amount / trip_distance AS fare_per_mile, "
-     "passenger_count AS pax FROM trips_enriched", 2),
+     "passenger_count AS pax FROM trips_enriched WHERE trip_distance >= 0.5", 2),
     ("avg_fare_by_pax", ["stg_trips"],
      "SELECT passenger_count AS pax_group, AVG(fare_amount) AS avg_fare_pax FROM stg_trips "
      "WHERE passenger_count BETWEEN 1 AND 4 GROUP BY passenger_count", 1),
@@ -146,17 +146,18 @@ class Lab:
         trips = self.pool.sample(SAMPLE_ROWS, random_state=seed).reset_index(drop=True)
         zones = self.zones.copy()
         sqls = dict(self.sql)
-        if fault is not None:
-            if fault["kind"] == "logic":
-                new_sql = sqls[fault["node"]].replace(fault["old"], fault["new"])
-                assert new_sql != sqls[fault["node"]], "fault did not change the SQL"
-                sqls[fault["node"]] = new_sql
+        faults = [] if fault is None else (fault if isinstance(fault, list) else [fault])
+        for f in faults:
+            if f["kind"] == "logic":
+                new_sql = sqls[f["node"]].replace(f["old"], f["new"])
+                assert new_sql != sqls[f["node"]], "fault did not change the SQL"
+                sqls[f["node"]] = new_sql
             else:
                 rng = np.random.default_rng(seed + 12345)
-                if fault["node"] == "trips_raw":
-                    trips = apply_data_fault(fault, trips, rng)
+                if f["node"] == "trips_raw":
+                    trips = apply_data_fault(f, trips, rng)
                 else:
-                    zones = apply_data_fault(fault, zones, rng)
+                    zones = apply_data_fault(f, zones, rng)
         con = duckdb.connect(":memory:")
         con.execute("PRAGMA threads=1")
         con.register("trips_df", trips)
@@ -212,7 +213,9 @@ def fingerprints(tables):
     """One number per table. Different number = the table's content changed."""
     out = {}
     for name, df in tables.items():
-        d = df.round(6)
+        d = df.copy()
+        num = d.select_dtypes(include="number").columns
+        d[num] = d[num].round(6)
         d = d.sort_values(list(d.columns)).reset_index(drop=True)
         out[name] = int(pd.util.hash_pandas_object(d, index=False).values.sum())
     return out
