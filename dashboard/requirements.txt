@@ -1,0 +1,5 @@
+streamlit
+duckdb==<the version printed above>
+pandas
+networkx
+requests
