@@ -1,5 +1,5 @@
 streamlit
-duckdb==<the version printed above>
+duckdb==2.0.0
 pandas
 networkx
 requests

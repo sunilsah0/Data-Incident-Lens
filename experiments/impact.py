@@ -80,4 +80,6 @@ def main():
         print(f"{label:44} spearman {rho:6.3f}   top-25% overlap {top:.2f}")
     save_results("business_impact", results, len(truth))
     print("\nSaved to the metadata store.")
-    
+
+if __name__ == "__main__":
+    main()
