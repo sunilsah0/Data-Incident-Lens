@@ -1,15 +1,23 @@
 import json
-import pandas as pd
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import duckdb
+import pandas as pd
 import streamlit as st
 
-STORE = "data/metadata.duckdb"
+from engine import assistant
+from engine.store import read_path
+
+
 st.set_page_config(page_title="SunilDataIncidentLens", layout="wide")
 
 
 @st.cache_data(ttl=10)
 def query(sql):
-    con = duckdb.connect(STORE, read_only=True)
+    con = duckdb.connect(read_path(), read_only=True)
     try:
         return con.execute(sql).df()
     finally:
@@ -36,10 +44,10 @@ except Exception as e:
     st.stop()
 
 (tab_overview, tab_quality, tab_pipeline, tab_stream, tab_cost,
- tab_ml, tab_ai, tab_gov, tab_inc) = st.tabs(
+ tab_ml, tab_ai, tab_gov, tab_inc, tab_assist, tab_exp) = st.tabs(
     ["Overview", "Data Quality", "Pipeline Monitoring", "Real-Time Analytics",
      "Cost Intelligence", "ML Monitoring", "AI Reliability", "Governance & Security",
-     "Incident Management"]
+     "Incident Management", "AI Engineering Assistant", "Experiments"]
 )
 # ---------- Overview ----------
 with tab_overview:
@@ -276,3 +284,49 @@ with tab_inc:
         st.dataframe(res, use_container_width=True)
     except Exception:
         st.caption("Experiment results appear here after: python -m experiments.run_experiments")
+
+
+# ---------- AI Engineering Assistant ----------
+with tab_assist:
+    st.subheader("AI Engineering Assistant")
+    key, model = os.environ.get("GROQ_API_KEY"), os.environ.get("GROQ_MODEL")
+    try:
+        key = st.secrets.get("GROQ_API_KEY", key)
+        model = st.secrets.get("GROQ_MODEL", model)
+    except Exception:
+        pass
+    if "chat" not in st.session_state:
+        st.session_state.chat, st.session_state.llm_calls = [], 0
+    use_key = key if st.session_state.llm_calls < 15 else None   # cap per visitor
+    st.caption("Mode: " + ("language model + read-only tools" if use_key
+                           else "built-in rules (no API key, or session limit reached)")
+               + ". Every answer comes from the metadata store.")
+    for m in st.session_state.chat:
+        with st.chat_message(m["role"]):
+            st.markdown(m["content"])
+    prompt = st.chat_input("Try: Why did incident 1 happen?  /  What should we do about it?")
+    if prompt:
+        st.session_state.chat.append({"role": "user", "content": prompt})
+        with st.spinner("Investigating..."):
+            try:
+                text, used = assistant.answer(prompt, st.session_state.chat[:-1], use_key, model)
+            except Exception as e:
+                text, used = f"Could not answer: {e}", "rules"
+        st.session_state.llm_calls += used == "llm"
+        st.session_state.chat.append({"role": "assistant", "content": text})
+        st.rerun()
+
+# ---------- Experiments ----------
+with tab_exp:
+    try:
+        res = query("SELECT experiment, method, metric, value, n FROM experiment_results "
+                    "ORDER BY experiment, method, metric")
+    except Exception:
+        res = pd.DataFrame()
+    if res.empty:
+        st.info("No experiment results yet. Run the scripts in experiments/.")
+    for name, g in res.groupby("experiment"):
+        st.subheader(name.replace("_", " ").title())
+        st.caption(f"{int(g['n'].iloc[0])} test cases")
+        st.dataframe(g.pivot_table(index="method", columns="metric", values="value").round(3),
+                     use_container_width=True)

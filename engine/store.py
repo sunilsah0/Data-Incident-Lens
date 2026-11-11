@@ -74,6 +74,9 @@ def register_asset(asset_id, asset_type, name, criticality):
                 [asset_id, asset_type, name, criticality])
     con.close()
 
+def read_path():
+    """Local store if it exists, otherwise the committed demo snapshot (Streamlit Cloud)."""
+    return STORE_PATH if os.path.exists(STORE_PATH) else "demo/metadata_snapshot.duckdb"
 
 if __name__ == "__main__":
     init_store()
