@@ -98,33 +98,51 @@ def experiment_results(name=None):
 
 
 # ---------- recommendations (rule-based, never LLM-generated) ----------
-def _playbook(metric, value, expected):
-    m = metric.lower()
-    moved = f"`{metric}` is {value:.3g} (expected about {expected:.3g})."
-    if m == "row_count":
-        return moved + " Check the upstream load or source extract for missing or duplicated data."
-    if m.startswith("null_rate"):
-        return moved + " Find which upstream change started producing nulls; check the source schema."
-    if m == "duplicate_rate":
-        return moved + " Look for a re-run or double load, then deduplicate on the business key."
-    if "lag" in m or "late_event" in m:
-        return moved + " Check consumer capacity and backpressure; scale the consumer or fix the slow producer."
-    if m.startswith("psi"):
-        return moved + " Input data has shifted. Find the source change, then decide whether to retrain."
-    if m.startswith("mae"):
-        return moved + " Model error is up. Compare with the last good batch and consider retraining."
-    if m == "stale_answer_rate":
-        return moved + " Refresh the index and retire superseded document versions."
-    if m == "unauthorized_answer_rate":
-        return moved + " The access filter is failing. Re-enable it before serving more answers."
-    if m == "ungrounded_answer_rate":
-        return moved + " Turn the abstain guard back on so the system says it does not know."
-    if m.startswith("access_violation") or m.startswith("pii_unauthorized"):
-        return moved + " Revoke the offending access and review the access log."
-    if m == "runtime_seconds":
-        return moved + " A pipeline step is running unusually long. Check data volume and locks."
-    return moved + " Compare with recent changes to the pipeline or its inputs."
+RULES = {
+    "psi_trip_distance": "alert when PSI is above 0.25 (big input shift)",
+    "mae_ratio": "alert when the error is more than 1.5x the training baseline",
+    "mae": "alert when the error is more than 1.5x the training baseline",
+    "p95_lag_seconds": "alert when p95 event lag is above 30 seconds",
+    "late_event_rate": "alert when more than 5% of events are late",
+    "stale_answer_rate": "alert when more than 5% of answers use old document versions",
+    "unauthorized_answer_rate": "alert when more than 5% of answers use restricted sources",
+    "ungrounded_answer_rate": "alert when more than 5% of answers are unsupported",
+    "access_violation_rate": "alert when more than 5% of accesses are denied",
+    "pii_unauthorized_accesses": "alert when more than 5 accesses to personal data are denied",
+}
 
+
+def _monitor_rule(metric):
+    rule = RULES.get(metric, "alert when it is more than 3 standard deviations "
+                             "from the average of its last 10 values")
+    return f"`{metric}`: {rule}."
+
+
+def _advice(metric):
+    m = metric.lower()
+    if m == "row_count":
+        return "Check the upstream load or source extract for missing or duplicated data."
+    if m.startswith("null_rate"):
+        return "Find which upstream change started producing nulls; check the source schema."
+    if m == "duplicate_rate":
+        return "Look for a re-run or double load, then deduplicate on the business key."
+    if "lag" in m or "late_event" in m:
+        return "Check consumer capacity and backpressure; scale the consumer or fix the slow producer."
+    if m.startswith("psi"):
+        return "Input data has shifted. Find the source change, then decide whether to retrain."
+    if m.startswith("mae"):
+        return "Model error is up. Compare with the last good batch and consider retraining."
+    if m == "stale_answer_rate":
+        return "Refresh the index and retire superseded document versions."
+    if m == "unauthorized_answer_rate":
+        return "The access filter is failing. Re-enable it before serving more answers."
+    if m == "ungrounded_answer_rate":
+        return "Turn the abstain guard back on so the system says it does not know."
+    if m.startswith("access_violation") or m.startswith("pii_unauthorized"):
+        return "Revoke the offending access and review the access log."
+    if m == "runtime_seconds":
+        return "A pipeline step is running unusually long. Check data volume and locks."
+    return "Compare with recent changes to the pipeline or its inputs."
 
 def _dbt_test(asset, module, metric, expected):
     if module != "data_quality" or "." not in asset:
@@ -160,12 +178,18 @@ def recommend_actions(incident_id):
     steps = [f"Recover: rebuild only the {len(affected)} affected assets "
              f"({', '.join(affected)}), not the whole pipeline. Re-run the monitors "
              f"afterwards to confirm the alerts clear."]
-    tests = []
+    grouped, tests, rules = {}, [], []
     for _, r in an.iterrows():
-        steps.append(_playbook(r["metric"], float(r["value"]), float(r["expected"])))
+        fact = f"`{r['metric']}` is {float(r['value']):.3g} (expected about {float(r['expected']):.3g})"
+        grouped.setdefault(_advice(r["metric"]), []).append(fact)
         t = _dbt_test(root, r["module"], r["metric"], float(r["expected"]))
         if t:
             tests.append(t)
+        else:
+            rules.append(_monitor_rule(r["metric"]))
+    for advice, facts in grouped.items():
+        steps.append("; ".join(facts) + ". " + advice)
     steps.append("Verify: compare row counts and key totals of the rebuilt tables with the last good run.")
     return {"incident_id": int(row["incident_id"]), "root_cause": root,
-            "steps": steps, "prevention_tests": tests}
+            "steps": steps, "prevention_tests": tests,
+            "monitor_rules": sorted(set(rules))}

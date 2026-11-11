@@ -55,7 +55,8 @@ def llm_answer(question, history, api_key, model):
                           headers={"Authorization": f"Bearer {api_key}"},
                           json={"model": model, "messages": messages, "tools": TOOLS,
                                 "tool_choice": "auto", "temperature": 0.1})
-        r.raise_for_status()
+        if r.status_code != 200:
+            raise RuntimeError(f"Groq returned {r.status_code}: {r.text[:200]}")
         msg = r.json()["choices"][0]["message"]
         calls = msg.get("tool_calls")
         if not calls:
@@ -102,15 +103,19 @@ def _render_reco(r):
     out += [f"{i}. {s}" for i, s in enumerate(r["steps"], 1)]
     for t in r["prevention_tests"]:
         out += ["", f"**Prevention test** (save as `{t['file']}`):", "```sql", t["sql"], "```"]
-    if not r["prevention_tests"]:
-        out += ["", "No dbt test template fits these metrics; add a monitoring threshold instead."]
+    if r.get("monitor_rules"):
+        out += ["", "**Monitoring rules to keep** (no dbt test fits these metrics):"]
+        out += [f"- {x}" for x in r["monitor_rules"]]
     return "\n".join(out)
 
 
 def rule_based(question):
     q = question.lower()
-    num = re.search(r"(?:incident\s*#?\s*|#)(\d+)", q)
     top = T.list_incidents(1)
+    ids = {i["incident_id"] for i in T.list_incidents(1000)}
+    num = re.search(r"(?:incident\s*#?\s*|#)(\d+)", q) or re.search(r"\b(\d+)\b", q)
+    if num and int(num.group(1)) not in ids:
+        return f"There is no incident #{num.group(1)}. Existing incidents: {sorted(ids)}"
     inc_id = int(num.group(1)) if num else (top[0]["incident_id"] if top else None)
     asset = next((a for a in T.all_asset_ids() if a.split(".")[-1].lower() in q), None)
 
@@ -136,6 +141,6 @@ def answer(question, history=None, api_key=None, model=None):
         try:
             return llm_answer(question, history, api_key, model or DEFAULT_MODEL), "llm"
         except Exception as e:
-            return (f"*(Language model unavailable: {str(e)[:80]}. Using built-in rules.)*\n\n"
+            return (f"*(Language model unavailable: {str(e)[:250]}. Using built-in rules.)*\n\n"
                     + rule_based(question), "rules")
     return rule_based(question), "rules"
