@@ -6,7 +6,7 @@
 alerts, ranks the likely root cause, shows the blast radius, plans a cheaper recovery, and
 suggests a test to prevent a repeat. Every claim below is measured in a fault-injection lab.
 
-**Live demo:** <your Streamlit link>  |  **Demo video:** <your link>
+**Live demo:** [<your [Streamlit link](https://data-incident-lens-6fpzvamvcxw5auu9jgembe.streamlit.app/)>](https://data-incident-lens-6fpzvamvcxw5auu9jgembe.streamlit.app/)  |  **Demo video:** <your link>
 
 ## Why
 Commercial tools such as Monte Carlo, Bigeye and Datadog are paid, and their AI root-cause
