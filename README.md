@@ -6,39 +6,81 @@
 alerts, ranks the likely root cause, shows the blast radius, plans a cheaper recovery, and
 suggests a test to prevent a repeat. Every claim below is measured in a fault-injection lab.
 
-**Live demo:** [<your [Streamlit link](https://data-incident-lens-6fpzvamvcxw5auu9jgembe.streamlit.app/)>](https://data-incident-lens-6fpzvamvcxw5auu9jgembe.streamlit.app/)  |  **Demo video:** <your link>
+**Live demo:** (https://data-incident-lens-6fpzvamvcxw5auu9jgembe.streamlit.app/)  |  **Demo video:**
+
+<your link></your>
+
+## Screenshots
+
+|                                               |                                          |
+| --------------------------------------------- | ---------------------------------------- |
+| ![Overview](docs/01-overview.png)             | ![DataQuality](docs/02-data-quality.png) |
+| ![Pipeline](docs/03-pipeline.png)             | ![Streaming](docs/04-streaming.png)      |
+| ![Cost](docs/05-cost.png)                     | ![ML](docs/06-ml.png)                    |
+| ![AI-Reliability](docs/07-ai-reliability.png) | ![Governance](docs/08-governance.png)    |
+| ![Incidents](docs/09-incidents.png)           | ![Assistant](docs/10-assistant.png)      |
+| ![Experiments](docs/11-experiments.png)       | ![Experiments](docs/11-experiments.png)  |
+
+## What is new
+
+Anomaly detection, lineage and root-cause ranking are not new ideas, and commercial tools
+already ship AI root-cause agents. **The novelty is in what this project adds around them:**
+
+|                             | Typical existing tools                                      | IncidentLens                                                                                                                                                  |
+| --------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Access**            | Paid SaaS (Monte Carlo is contact-for-pricing)              | **Free, open source, runs on a laptop**                                                                                                                 |
+| **Evidence**          | Marketing claims about speed and accuracy                   | **A public, reproducible fault-injection benchmark**: 18 fault types, 108 runs, known ground truth, simple baselines for every experiment               |
+| **Explainability**    | AI agents give a hypothesis                                 | **A transparent score** with every part shown (abnormality, alerts explained, purity, healthy-above)                                                    |
+| **Scope**             | Data observability, with AI and governance usually separate | **One incident model** across data, streaming, ML, RAG answers and governance                                                                           |
+| **Multiple causes**   | One suspected cause                                         | Peels off causes one at a time: finds both in 42% of double-fault cases vs 0% for single-cause baselines                                                      |
+| **Before deployment** | Impact checks vary by tool                                  | Predicts what a SQL change will break using column-level lineage: F1 0.91 vs 0.76 for "any change is risky", 0 breaking changes missed                        |
+| **Recovery**          | Resolve the incident                                        | Plans the cheapest rebuild, validates with the monitors, escalates if damage remains: 26% of full-replay cost vs 39% for partition backfill, all runs correct |
+| **AI answer trust**   | Typically a grounding or quality score                      | A **catalogue-aware check** (version, age, access level). A grounding-only check missed all stale and unauthorised answers (recall 0.48 vs 1.00)        |
+| **Cost**              | Reports spend                                               | Cuts simulated cost to 17% with 97% of reads inside freshness limits; a blind cut costs the same but meets 72%                                                |
+| **Prevention**        | Alert and resolve                                           | After each incident it suggests a dbt test or monitoring rule                                                                                                 |
+
+**What is not new:** z-score anomaly detection, dbt-based lineage, and the idea of root-cause ranking.
+**What I could not beat:** a simple alert count ranks incident severity better than my estimator
+(Spearman 0.61 vs 0.54).
 
 ## Why
+
 Commercial tools such as Monte Carlo, Bigeye and Datadog are paid, and their AI root-cause
 agents are black boxes with marketing-level accuracy claims. To my knowledge there is no
 public, reproducible benchmark. IncidentLens is free, transparent (every score is shown)
 and benchmarked.
 
 ## What it covers (10 dashboard modules)
+
 Overview, Data Quality, Pipeline Monitoring, Real-Time Analytics, Cost Intelligence,
 ML Monitoring, AI Reliability, Governance & Security, Incident Management, AI Engineering Assistant.
 
 ## Architecture
+
 <diagram: sources -> dbt/DuckDB -> collectors -> metadata store -> engine -> Streamlit>
 
 ## Results
+
 All results come from a 15-table lab built from NYC taxi data with 18 injected fault types.
 Scripts are in `experiments/`; raw rows are in `experiments/results/`.
 
-| Experiment | Result |
-|---|---|
-| Fault detection (108 runs) | 100% of 18 fault types detected |
-| Alert grouping | 8.5 alerts per fault become 1 incident |
-| Root cause, single fault | 100% top-1, **but loudest-alert and most-upstream baselines also score 100%**, so this lab cannot separate the methods |
-| Root cause, two faults at once (40 pairs) | Recall 0.71 vs 0.50 for both baselines; both causes found in 42% vs 0% |
-| Dependency analysis | Column-level F1 0.975 vs 0.924 for table-level (recall 1.0 for both) |
-| Change prediction (26 changes) | F1 0.91 vs 0.76 ("any change is risky") and 0.53 (schema diff); 0 breaking changes missed |
-| Business impact | <paste results of experiments.impact> |
-| Recovery planning (18 scenarios) | 26% of full-replay cost vs 39% for partition backfill, 100% correct |
-| AI trust (144 answers) | Grounding-only check recall 0.48 (misses all stale and unauthorised answers); catalogue-aware check 1.00 |
-| Cost optimisation (40 setups) | 17% of original cost with 97.0% of reads meeting freshness limits; blind cut costs the same but meets 71.9% |
+| Experiment                                | Result                                                                                                                       |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Fault detection (108 runs)                | 100% of 18 fault types detected                                                                                              |
+| Alert grouping                            | 8.5 alerts per fault become 1 incident                                                                                       |
+| Root cause, single fault                  | 100% top-1, **but loudest-alert and most-upstream baselines also score 100%**, so this lab cannot separate the methods |
+| Root cause, two faults at once (40 pairs) | Recall 0.71 vs 0.50 for both baselines; both causes found in 42% vs 0%                                                       |
+| Dependency analysis                       | Column-level F1 0.975 vs 0.924 for table-level (recall 1.0 for both)                                                         |
+| Change prediction (26 changes)            | F1 0.91 vs 0.76 ("any change is risky") and 0.53 (schema diff); 0 breaking changes missed                                    |
+| Business impact                           | <paste results of experiments.impact></paste>                                                                                |
+| Recovery planning (18 scenarios)          | 26% of full-replay cost vs 39% for partition backfill, 100% correct                                                          |
+| AI trust (144 answers)                    | Grounding-only check recall 0.48 (misses all stale and unauthorised answers); catalogue-aware check 1.00                     |
+| Cost optimisation (40 setups)             | 17% of original cost with 97.0% of reads meeting freshness limits; blind cut costs the same but meets 71.9%                  |
+
+| Business impact (36 faults) | Our best estimator Spearman 0.54 vs 0.61 for a plain alert count. **We do not beat this baseline.** |
 
 ## Limitations (read these)
+
 - Faults, access logs, streaming and cloud prices are **simulated**; business values are synthetic.
 - Nested faults (one fault downstream of another, 23 of 40 pairs) are often explained away by the upstream root cause.
 - Column-level lineage treats columns used in WHERE clauses as affecting every output (e.g. `unit_distance` precision 0.38).
@@ -48,6 +90,7 @@ Scripts are in `experiments/`; raw rows are in `experiments/results/`.
 - Recovery's validate-and-escalate step was never triggered in the 18 scenarios.
 
 ## Run it
+
 ```
 pip install -r requirements.txt
 python collectors/load_raw.py
@@ -57,5 +100,6 @@ python -m experiments.run_experiments
 ```
 
 ## Future work
+
 Residual-based root cause for nested faults, filter-aware column lineage, a real document
 versioning feed for the AI trust check, real warehouse billing data.
